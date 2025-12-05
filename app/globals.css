@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom globals */
+body {
+  @apply bg-slate-50 text-slate-900 font-inter;
+}
+
+h1, h2, h3, h4 {
+  @apply font-semibold text-gray-900;
+}
+
+a {
+  @apply text-blue-600 hover:text-blue-800 transition;
+}
+
+/* Navbar fix */
+.navbar {
+  @apply bg-white shadow-md sticky top-0 z-50;
+}
