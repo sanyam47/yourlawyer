@@ -1,115 +1,172 @@
 "use client";
 
-import React, { useState } from "react";
-import AnimatedWrapper from "@/components/AnimatedWrapper";
-import {
-  LayoutDashboard,
-  Users,
-  FileText,
-  DollarSign,
-  LogOut,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function LawyerDashboardPage() {
-  const [activeTab, setActiveTab] = useState("requests");
+  const router = useRouter();
 
-  const navItems = [
-    { id: "dashboard", name: "Dashboard", icon: LayoutDashboard },
-    { id: "requests", name: "Requests", icon: Users },
-    { id: "cases", name: "Cases", icon: FileText },
-    { id: "earnings", name: "Earnings", icon: DollarSign },
-  ];
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const mockRequests = [
-    { id: 1, client: "Riya Mehta", case: "Contract Review", status: "Pending" },
-    { id: 2, client: "Aditya Rao", case: "Property Dispute", status: "Accepted" },
-  ];
+  // ===============================
+  // AUTH + FETCH BOOKINGS
+  // ===============================
+  useEffect(() => {
+    const token = localStorage.getItem("yl_token");
+    const user = JSON.parse(localStorage.getItem("user"));
 
+    // 🔐 Auth protection
+    if (!token || !user) {
+      router.push("/auth/login");
+      return;
+    }
+
+    if (user.role !== "lawyer") {
+      router.push("/dashboard");
+      return;
+    }
+
+    fetch("http://localhost:5000/api/bookings/lawyer", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setBookings(data);
+        } else {
+          setBookings([]);
+        }
+      })
+      .catch(() => {
+        setBookings([]);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [router]);
+
+  // ===============================
+  // UPDATE BOOKING STATUS
+  // ===============================
+  const updateStatus = async (bookingId, status) => {
+    const token = localStorage.getItem("yl_token");
+
+    if (!token) {
+      alert("Session expired. Please login again.");
+      router.push("/auth/login");
+      return;
+    }
+
+    const res = await fetch(
+      `http://localhost:5000/api/bookings/${bookingId}`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status }),
+      }
+    );
+
+    if (!res.ok) {
+      alert("Failed to update booking status");
+      return;
+    }
+
+    // Update UI instantly
+    setBookings((prev) =>
+      prev.map((b) =>
+        b._id === bookingId ? { ...b, status } : b
+      )
+    );
+  };
+
+  // ===============================
+  // LOADING STATE
+  // ===============================
+  if (loading) {
+    return (
+      <p className="text-center mt-10 text-slate-600">
+        Loading lawyer dashboard...
+      </p>
+    );
+  }
+
+  // ===============================
+  // UI
+  // ===============================
   return (
-    <AnimatedWrapper>
-      <div className="p-6">
-        <div className="min-h-screen flex bg-slate-50 font-inter">
-          
-          {/* SIDEBAR (SAME AS CLIENT DASHBOARD) */}
-          <aside className="w-64 bg-[#13233F] text-white flex flex-col p-6 space-y-6">
-            <h1 className="text-xl font-bold mb-4">YourLawyer</h1>
+    <div className="max-w-4xl mx-auto mt-10">
+      <h1 className="text-3xl font-bold mb-6">
+        Lawyer Dashboard
+      </h1>
 
-            <nav className="flex-1 space-y-3">
-              {navItems.map(({ id, name, icon: Icon }) => (
-                <button
-                  key={id}
-                  onClick={() => setActiveTab(id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition ${
-                    activeTab === id ? "bg-white/20" : "hover:bg-white/10"
-                  }`}
-                >
-                  <Icon size={18} />
-                  <span>{name}</span>
-                </button>
-              ))}
-            </nav>
+      {bookings.length === 0 ? (
+        <p className="text-slate-600">
+          No client bookings yet.
+        </p>
+      ) : (
+        <div className="space-y-4">
+          {bookings.map((booking) => (
+            <div
+              key={booking._id}
+              className="border rounded-lg p-4 bg-white shadow-sm"
+            >
+              <p className="font-semibold">
+                Client: {booking.client?.name || "Unknown"}
+              </p>
 
-            <button className="flex items-center gap-2 px-3 py-2 text-sm rounded-md bg-white/10 hover:bg-white/20 transition">
-              <LogOut size={16} /> Sign Out
-            </button>
-          </aside>
+              <p className="text-sm text-slate-600 mt-1">
+                {booking.caseDescription}
+              </p>
 
-          {/* MAIN CONTENT */}
-          <main className="flex-1 p-8">
-            <h2 className="text-2xl font-semibold text-[#13233F] mb-6">
-              Lawyer Dashboard
-            </h2>
+              <p className="mt-2 text-sm">
+                Status:{" "}
+                <span className="font-medium capitalize">
+                  {booking.status}
+                </span>
+              </p>
 
-            {/* REQUESTS */}
-            {activeTab === "requests" && (
-              <div className="space-y-4">
-                {mockRequests.map((req) => (
-                  <div
-                    key={req.id}
-                    className="bg-white p-4 border border-slate-200 rounded-lg flex justify-between items-center"
+              {booking.status === "pending" && (
+                <div className="flex gap-3 mt-3">
+                  <button
+                    onClick={() =>
+                      updateStatus(booking._id, "accepted")
+                    }
+                    className="bg-green-600 text-white px-4 py-1 rounded"
                   >
-                    <div>
-                      <p className="font-medium text-slate-800">{req.client}</p>
-                      <p className="text-sm text-slate-600">{req.case}</p>
-                    </div>
-                    <span
-                      className={`text-xs font-semibold px-3 py-1 rounded ${
-                        req.status === "Pending"
-                          ? "bg-yellow-100 text-yellow-800"
-                          : "bg-green-100 text-green-800"
-                      }`}
-                    >
-                      {req.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+                    Accept
+                  </button>
 
-            {/* CASES */}
-            {activeTab === "cases" && (
-              <div className="bg-white p-6 rounded-lg border border-slate-200">
-                <p className="text-slate-700">
-                  Case timelines, documents, and updates will appear here.
-                </p>
-              </div>
-            )}
+                  <button
+                    onClick={() =>
+                      updateStatus(booking._id, "rejected")
+                    }
+                    className="bg-red-600 text-white px-4 py-1 rounded"
+                  >
+                    Reject
+                  </button>
+                </div>
+              )}
 
-            {/* EARNINGS */}
-            {activeTab === "earnings" && (
-              <div className="bg-white p-6 rounded-lg border border-slate-200">
-                <p className="text-sm text-slate-500 mb-2">
-                  Monthly Earnings
-                </p>
-                <p className="text-2xl font-semibold text-[#13233F]">
-                  ₹11,200
-                </p>
-              </div>
-            )}
-          </main>
+              {booking.status === "accepted" && (
+                <button
+                  onClick={() =>
+                    router.push(`/chat/${booking._id}`)
+                  }
+                  className="mt-3 bg-black text-white px-4 py-1 rounded"
+                >
+                  Open Chat
+                </button>
+              )}
+            </div>
+          ))}
         </div>
-      </div>
-    </AnimatedWrapper>
+      )}
+    </div>
   );
 }
-

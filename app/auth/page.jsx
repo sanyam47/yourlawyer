@@ -3,17 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function AuthPage() {
+export default function LoginPage() {
   const router = useRouter();
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
+  const handleLogin = async () => {
     try {
       const res = await fetch("http://localhost:5000/api/auth/login", {
         method: "POST",
@@ -30,47 +25,38 @@ export default function AuthPage() {
         return;
       }
 
-      // ✅ SAVE TOKEN UNDER THE CORRECT KEY
-      localStorage.setItem("yl_token", data.token);
+      // ✅ SAVE TOKEN (THIS IS THE FIX)
+      localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
 
-      // ✅ REDIRECT AFTER LOGIN
-      router.push("/documents");
-    } catch (err) {
-      alert("Server error");
-      console.error(err);
-    } finally {
-      setLoading(false);
+      // ✅ Redirect to chat
+      router.push("/chat");
+    } catch (error) {
+      console.error(error);
+      alert("Login failed");
     }
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <form onSubmit={handleLogin} style={{ width: 300 }}>
-        <h2>Login</h2>
+    <div style={{ padding: 40 }}>
+      <h1>Login</h1>
 
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          style={{ width: "100%", marginBottom: 10 }}
-        />
+      <input
+        placeholder="Email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
+      <br /><br />
 
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          style={{ width: "100%", marginBottom: 10 }}
-        />
+      <input
+        type="password"
+        placeholder="Password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+      <br /><br />
 
-        <button type="submit" disabled={loading} style={{ width: "100%" }}>
-          {loading ? "Logging in..." : "Login"}
-        </button>
-      </form>
+      <button onClick={handleLogin}>Login</button>
     </div>
   );
 }
