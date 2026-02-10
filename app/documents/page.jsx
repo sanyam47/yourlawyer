@@ -12,49 +12,26 @@ export default function DocumentsPage() {
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // 🔑 Q&A states
   const [selectedDocumentId, setSelectedDocumentId] = useState(null);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
 
-  // 📄 Template Fill States
-  const [fields, setFields] = useState([]);
-  const [values, setValues] = useState({});
-
-  // ✅ wait for hydration
+  /* ================= HYDRATION ================= */
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // 🔐 auth check
+  /* ================= AUTH CHECK ================= */
   useEffect(() => {
     if (!mounted) return;
 
     const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/auth");
-    }
+    if (!token) router.push("/auth");
   }, [mounted, router]);
-
-  // 📄 Load template fields
-  useEffect(() => {
-    async function loadFields() {
-      try {
-        const res = await fetch(
-          "http://localhost:5000/api/template-fill/fields"
-        );
-        const data = await res.json();
-        setFields(data.fields || []);
-      } catch (err) {
-        console.error("Failed to load template fields", err);
-      }
-    }
-
-    loadFields();
-  }, []);
 
   if (!mounted) return null;
 
+  /* ================= FILE HANDLING ================= */
   const handleFileUpload = (e) => {
     const uploaded = Array.from(e.target.files);
     setFiles(uploaded);
@@ -67,9 +44,7 @@ export default function DocumentsPage() {
     setSelectedDocumentId(null);
   };
 
-  /* =========================
-       ANALYZE DOCUMENT
-  ========================= */
+  /* ================= ANALYZE DOCUMENT ================= */
   const handleAnalyze = async () => {
     if (files.length === 0) {
       alert("Please upload a document first");
@@ -78,7 +53,6 @@ export default function DocumentsPage() {
 
     const token = localStorage.getItem("token");
     if (!token) {
-      alert("Please login again");
       router.push("/auth");
       return;
     }
@@ -102,15 +76,18 @@ export default function DocumentsPage() {
         }
       );
 
-      const data = await res.json();
-
       if (!res.ok) {
-        alert(data.message || "Analysis failed");
+        const text = await res.text();
+        console.log("Server error:", text);
+        alert("Analysis failed");
         return;
       }
 
+      const data = await res.json();
+
       setAnalysis(data.analysis);
       setSelectedDocumentId(data.documentId || data._id || null);
+
     } catch (err) {
       console.error(err);
       alert("Server error");
@@ -119,9 +96,7 @@ export default function DocumentsPage() {
     }
   };
 
-  /* =========================
-       ASK QUESTION ABOUT DOC
-  ========================= */
+  /* ================= ASK QUESTION ================= */
   const askQuestion = async () => {
     if (!question) {
       alert("Please type a question");
@@ -155,50 +130,21 @@ export default function DocumentsPage() {
         }
       );
 
-      const data = await res.json();
-
       if (!res.ok) {
-        alert(data.message || "Failed to get answer");
+        const text = await res.text();
+        console.log("Server error:", text);
+        alert("Failed to get answer");
         return;
       }
 
+      const data = await res.json();
       setAnswer(data.answer);
+
     } catch (err) {
       console.error(err);
       alert("Server error");
     }
   };
-
-  /* =========================
-       GENERATE FINAL PDF
-  ========================= */
-  async function generatePDF() {
-    try {
-      const res = await fetch(
-        "http://localhost:5000/api/template-fill/generate",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ values }),
-        }
-      );
-
-      const data = await res.json();
-
-      if (!data.downloadUrl) {
-        alert("PDF generation failed");
-        return;
-      }
-
-      // ✅ Open generated PDF
-      window.open(data.downloadUrl, "_blank");
-    } catch (err) {
-      console.error(err);
-      alert("Server error while generating PDF");
-    }
-  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -212,7 +158,8 @@ export default function DocumentsPage() {
       </header>
 
       <main className="flex-1 p-8">
-        {/* Upload */}
+
+        {/* Upload Section */}
         <div className="border-2 border-dashed rounded-lg bg-white p-10 text-center">
           <Upload size={32} className="mx-auto mb-3 text-[#13233F]" />
           <p className="mb-3">Drag & drop files or browse</p>
@@ -311,41 +258,6 @@ export default function DocumentsPage() {
           </div>
         )}
 
-        {/* 🧾 Template Fill */}
-        {fields.length > 0 && (
-          <div className="mt-10 bg-white p-6 rounded-md border">
-            <h3 className="text-lg font-semibold mb-4">
-              Fill Template & Generate PDF
-            </h3>
-
-            {fields.map((field) => (
-              <div key={field} className="mb-3">
-                <label className="block font-medium mb-1">
-                  {field.replaceAll("_", " ")}
-                </label>
-
-                <input
-                  className="border p-2 w-full rounded"
-                  value={values[field] || ""}
-                  onChange={(e) =>
-                    setValues({
-                      ...values,
-                      [field]: e.target.value,
-                    })
-                  }
-                  placeholder={`Enter ${field}`}
-                />
-              </div>
-            ))}
-
-            <button
-              onClick={generatePDF}
-              className="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-            >
-              📄 Generate Final PDF
-            </button>
-          </div>
-        )}
       </main>
     </div>
   );

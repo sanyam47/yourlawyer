@@ -1,207 +1,329 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 
-export default function ChatPage() {
-  const router = useRouter();
-  const [mounted, setMounted] = useState(false);
+export default function AIChatPage() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // 🆕 Case modal states
-  const [showCaseModal, setShowCaseModal] = useState(false);
-  const [caseTitle, setCaseTitle] = useState("");
-  const [caseDescription, setCaseDescription] = useState("");
-  const [caseLoading, setCaseLoading] = useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [chatName, setChatName] = useState("");
+  const [description, setDescription] = useState("");
 
-  // ✅ wait for hydration
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const [showSavedChats, setShowSavedChats] = useState(false);
+  const [savedChats, setSavedChats] = useState([]);
+  const [activeChatId, setActiveChatId] = useState(null);
 
-  // 🔐 AUTH CHECK
-  useEffect(() => {
-    if (!mounted) return;
+  /* ================= SEND MESSAGE ================= */
 
-    const token = localStorage.getItem("token"); // ✅ FIXED
-    if (!token) {
-      router.push("/auth");
-    }
-  }, [mounted, router]);
-
-  if (!mounted) return null;
-
-  // ================= CHAT =================
   const sendMessage = async () => {
     if (!input.trim()) return;
 
-    const token = localStorage.getItem("yl_token"); // ✅ FIXED
-    if (!token) {
-      router.push("/auth");
-      return;
-    }
-
-    const userMessage = input;
+    const userMessage = { role: "user", content: input };
+    setMessages((prev) => [...prev, userMessage]);
     setInput("");
-
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", text: userMessage },
-    ]);
-
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:5000/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ message: userMessage }),
-      });
+      let res;
+
+      if (activeChatId) {
+        res = await fetch(
+          `http://localhost:5000/api/ai-chat/${activeChatId}/message`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+            },
+            body: JSON.stringify({ message: input }),
+          }
+        );
+      } else {
+        res = await fetch("http://localhost:5000/api/ai-chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: input }),
+        });
+      }
 
       const data = await res.json();
 
-      if (!res.ok) {
-        alert(data.message || "Chat failed");
-        return;
-      }
-
       setMessages((prev) => [
         ...prev,
-        { role: "ai", text: data.reply || data.message },
+        {
+          role: "assistant",
+          content: data.reply,
+          similarCases: data.similarCases || [],
+        },
       ]);
     } catch (error) {
       console.error(error);
-      alert("Server error");
+      alert("AI error");
     } finally {
       setLoading(false);
     }
   };
 
-  // ================= REGISTER CASE =================
-  const createCase = async () => {
-    if (!caseTitle.trim()) {
-      alert("Case title is required");
+  /* ================= SAVE CHAT ================= */
+
+  const saveChat = async () => {
+    if (!chatName.trim()) {
+      alert("Chat name required");
       return;
     }
-
-    const token = localStorage.getItem("yl_token"); // ✅ FIXED
-    if (!token) {
-      router.push("/auth");
-      return;
-    }
-
-    setCaseLoading(true);
 
     try {
-      const res = await fetch("http://localhost:5000/api/cases", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          title: caseTitle,
-          description: caseDescription,
-        }),
-      });
+      const res = await fetch(
+        "http://localhost:5000/api/ai-chat/register",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          body: JSON.stringify({
+            name: chatName,
+            description,
+            messages,
+          }),
+        }
+      );
 
-      const data = await res.json();
+      if (!res.ok) throw new Error();
 
-      if (!res.ok) {
-        alert(data.message || "Failed to create case");
-        return;
-      }
-
-      alert("✅ Case registered successfully!");
-      setCaseTitle("");
-      setCaseDescription("");
-      setShowCaseModal(false);
-    } catch (err) {
-      console.error(err);
-      alert("Server error");
-    } finally {
-      setCaseLoading(false);
+      alert("Chat saved successfully!");
+      setShowSaveModal(false);
+      setChatName("");
+      setDescription("");
+    } catch {
+      alert("Save failed");
     }
   };
 
+  /* ================= LOAD SAVED CHATS ================= */
+
+  const loadSavedChats = async () => {
+    try {
+      const res = await fetch(
+        "http://localhost:5000/api/ai-chat/saved",
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
+      );
+
+      const data = await res.json();
+      setSavedChats(data);
+      setShowSavedChats(true);
+    } catch {
+      alert("Failed to load chats");
+    }
+  };
+
+  const openChat = async (id) => {
+    const res = await fetch(
+      `http://localhost:5000/api/ai-chat/${id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      }
+    );
+
+    const data = await res.json();
+    setMessages(data.messages);
+    setActiveChatId(id);
+    setShowSavedChats(false);
+  };
+
+  const deleteChat = async (id) => {
+    if (!confirm("Delete this chat?")) return;
+
+    await fetch(`http://localhost:5000/api/ai-chat/${id}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+    });
+
+    setSavedChats((prev) => prev.filter((c) => c._id !== id));
+  };
+
+  const newChat = () => {
+    setMessages([]);
+    setActiveChatId(null);
+    setShowSavedChats(false);
+  };
+
+  /* ================= UI ================= */
+
   return (
-    <div style={{ maxWidth: 800, margin: "40px auto" }}>
-      <h2>⚖️ AI Legal Chat</h2>
+    <div className="min-h-screen p-8 bg-gray-100">
+      <div className="max-w-3xl mx-auto bg-white p-6 rounded shadow">
 
-      <div style={{ marginBottom: 12, display: "flex", gap: 10 }}>
-        <button
-          onClick={() => router.push("/cases")}
-          style={btnGreen}
-        >
-          📁 My Cases
-        </button>
+        {/* HEADER */}
+        <div className="flex justify-between mb-4">
+          <h1 className="text-2xl font-bold">
+            🤖 AI Legal Assistant
+          </h1>
 
-        <button
-          onClick={() => setShowCaseModal(true)}
-          style={btnBlue}
-        >
-          ➕ Register Case
-        </button>
-      </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowSaveModal(true)}
+              className="bg-green-600 text-white px-4 py-2 rounded"
+            >
+              💾 Save
+            </button>
 
-      {/* 💬 Chat Box */}
-      <div style={chatBox}>
-        {messages.map((msg, i) => (
-          <div key={i} style={{ marginBottom: 12 }}>
-            <strong>{msg.role === "user" ? "You" : "AI"}:</strong>{" "}
-            {msg.text}
+            <button
+              onClick={loadSavedChats}
+              className="bg-black text-white px-4 py-2 rounded"
+            >
+              📂 Saved Chats
+            </button>
+
+            <button
+              onClick={newChat}
+              className="bg-gray-300 px-4 py-2 rounded"
+            >
+              + New
+            </button>
           </div>
-        ))}
-        {loading && <p>AI is typing...</p>}
+        </div>
+
+        {/* SAVED CHAT LIST */}
+        {showSavedChats && (
+          <div className="mb-4 border p-3 rounded">
+            <h2 className="font-semibold mb-2">Saved Chats</h2>
+
+            {savedChats.map((chat) => (
+              <div
+                key={chat._id}
+                className="p-2 border rounded mb-2 flex justify-between items-center hover:bg-gray-100"
+              >
+                <div
+                  onClick={() => openChat(chat._id)}
+                  className="cursor-pointer"
+                >
+                  <div className="font-medium">{chat.name}</div>
+                  {chat.description && (
+                    <div className="text-sm text-gray-500">
+                      {chat.description}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => deleteChat(chat._id)}
+                  className="text-red-600 text-sm"
+                >
+                  🗑 Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* MESSAGES */}
+        <div className="h-96 overflow-y-auto border p-4 rounded mb-4 space-y-4">
+          {messages.map((msg, i) => (
+            <div key={i}>
+              <div
+                className={`px-4 py-2 rounded max-w-[80%] ${
+                  msg.role === "user"
+                    ? "bg-black text-white ml-auto"
+                    : "bg-gray-200"
+                }`}
+              >
+                {msg.content}
+              </div>
+
+              {/* Recommended Cases Section */}
+              {msg.similarCases?.length > 0 && (
+                <div className="mt-3">
+                  <div className="text-sm font-semibold text-gray-600 mb-2">
+                    🔎 Recommended Cases
+                  </div>
+
+                  {msg.similarCases.map((caseItem, index) => (
+                    <a
+                      key={index}
+                      href={caseItem.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block border rounded p-3 mb-2 hover:bg-gray-100 transition"
+                    >
+                      <div className="font-medium text-blue-600">
+                        {caseItem.title}
+                      </div>
+                      <div className="text-xs text-gray-500 break-all">
+                        {caseItem.link}
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {loading && <p>AI is typing...</p>}
+        </div>
+
+        {/* INPUT */}
+        <div className="flex gap-2">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            className="flex-1 border p-2 rounded"
+            placeholder="Ask legal question..."
+          />
+          <button
+            onClick={sendMessage}
+            className="bg-black text-white px-4 rounded"
+          >
+            Send
+          </button>
+        </div>
       </div>
 
-      {/* ✍️ Input */}
-      <div style={{ display: "flex", gap: 8 }}>
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask a legal question..."
-          style={{ flex: 1, padding: 10 }}
-        />
-        <button onClick={sendMessage}>Send</button>
-      </div>
-
-      {/* 🪟 Case Modal */}
-      {showCaseModal && (
-        <div style={modalOverlay}>
-          <div style={modalBox}>
-            <h3>📁 Register New Case</h3>
+      {/* SAVE MODAL */}
+      {showSaveModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
+          <div className="bg-white p-6 rounded shadow w-96">
+            <h2 className="text-lg font-bold mb-4">
+              Save This Chat
+            </h2>
 
             <input
-              placeholder="Case Title"
-              value={caseTitle}
-              onChange={(e) => setCaseTitle(e.target.value)}
-              style={inputStyle}
+              placeholder="Chat name"
+              value={chatName}
+              onChange={(e) => setChatName(e.target.value)}
+              className="w-full border p-2 rounded mb-3"
             />
 
             <textarea
-              placeholder="Case Description"
-              value={caseDescription}
-              onChange={(e) => setCaseDescription(e.target.value)}
-              style={{ ...inputStyle, height: 80 }}
+              placeholder="Short description (optional)"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full border p-2 rounded mb-4"
             />
 
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setShowCaseModal(false)}>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowSaveModal(false)}
+                className="px-4 py-2 border rounded"
+              >
                 Cancel
               </button>
 
               <button
-                onClick={createCase}
-                disabled={caseLoading}
-                style={btnGreen}
+                onClick={saveChat}
+                className="bg-green-600 text-white px-4 py-2 rounded"
               >
-                {caseLoading ? "Saving..." : "Save Case"}
+                Save
               </button>
             </div>
           </div>
@@ -210,52 +332,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
-// 🎨 Styles
-const btnGreen = {
-  padding: "8px 14px",
-  background: "#16a34a",
-  color: "white",
-  border: "none",
-  borderRadius: 6,
-  cursor: "pointer",
-};
-
-const btnBlue = {
-  padding: "8px 14px",
-  background: "#2563eb",
-  color: "white",
-  border: "none",
-  borderRadius: 6,
-  cursor: "pointer",
-};
-
-const chatBox = {
-  border: "1px solid #ccc",
-  padding: 16,
-  minHeight: 350,
-  marginBottom: 16,
-  background: "#fafafa",
-};
-
-const modalOverlay = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.3)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
-
-const modalBox = {
-  background: "white",
-  padding: 20,
-  width: 350,
-  borderRadius: 8,
-};
-
-const inputStyle = {
-  width: "100%",
-  padding: 8,
-  marginBottom: 10,
-};

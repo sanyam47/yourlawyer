@@ -8,58 +8,54 @@ export default function LawyerDashboardPage() {
 
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [slotData, setSlotData] = useState({});
 
-  // ===============================
-  // AUTH + FETCH BOOKINGS
-  // ===============================
   useEffect(() => {
-    const token = localStorage.getItem("yl_token");
+    const token = localStorage.getItem("token");
     const user = JSON.parse(localStorage.getItem("user"));
 
-    // 🔐 Auth protection
     if (!token || !user) {
-      router.push("/auth/login");
+      router.replace("/auth");
       return;
     }
 
     if (user.role !== "lawyer") {
-      router.push("/dashboard");
+      router.replace("/dashboard");
       return;
     }
 
     fetch("http://localhost:5000/api/bookings/lawyer", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
+  headers: { Authorization: `Bearer ${token}` },
+})
+
       .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setBookings(data);
-        } else {
-          setBookings([]);
-        }
-      })
-      .catch(() => {
-        setBookings([]);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+      .then((data) => setBookings(Array.isArray(data) ? data : []))
+      .finally(() => setLoading(false));
   }, [router]);
 
-  // ===============================
-  // UPDATE BOOKING STATUS
-  // ===============================
-  const updateStatus = async (bookingId, status) => {
-    const token = localStorage.getItem("yl_token");
+const updateBooking = async (bookingId, status) => {
+  const token = localStorage.getItem("token");
 
-    if (!token) {
-      alert("Session expired. Please login again.");
-      router.push("/auth/login");
+  if (status === "confirmed") {
+    const selectedDate = slotData[bookingId]?.date;
+    const selectedTime = slotData[bookingId]?.timeSlot;
+
+    if (!selectedDate || !selectedTime) {
+      alert("Please select date and time slot");
       return;
     }
+  }
 
+  const payload =
+    status === "confirmed"
+      ? {
+          status: "confirmed",
+          date: slotData[bookingId].date,
+          timeSlot: slotData[bookingId].timeSlot,
+        }
+      : { status: "rejected" };
+
+  try {
     const res = await fetch(
       `http://localhost:5000/api/bookings/${bookingId}`,
       {
@@ -68,26 +64,26 @@ export default function LawyerDashboardPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(payload),
       }
     );
 
+    const data = await res.json();
+
     if (!res.ok) {
-      alert("Failed to update booking status");
+      alert(data.message || "Failed to update booking");
       return;
     }
 
-    // Update UI instantly
     setBookings((prev) =>
-      prev.map((b) =>
-        b._id === bookingId ? { ...b, status } : b
-      )
+      prev.map((b) => (b._id === bookingId ? data.booking : b))
     );
-  };
+  } catch (error) {
+    alert("Server error");
+  }
+};
 
-  // ===============================
-  // LOADING STATE
-  // ===============================
+
   if (loading) {
     return (
       <p className="text-center mt-10 text-slate-600">
@@ -96,72 +92,150 @@ export default function LawyerDashboardPage() {
     );
   }
 
-  // ===============================
-  // UI
-  // ===============================
   return (
-    <div className="max-w-4xl mx-auto mt-10">
-      <h1 className="text-3xl font-bold mb-6">
-        Lawyer Dashboard
-      </h1>
+    <div className="max-w-6xl mx-auto mt-10 px-4">
+
+      {/* HEADER */}
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold">
+          ⚖️ Lawyer Dashboard
+        </h1>
+
+        <button
+          onClick={() => {
+            localStorage.clear();
+            router.replace("/auth");
+          }}
+          className="bg-red-600 text-white px-4 py-2 rounded"
+        >
+          Logout
+        </button>
+      </div>
+
+      {/* ACTION BUTTONS */}
+      <div className="flex gap-4 mb-10">
+        <button
+          onClick={() => router.push("/lawyer-profile")}
+          className="bg-green-600 text-white px-6 py-2 rounded"
+        >
+          Edit Profile
+        </button>
+
+        <button
+          onClick={() => router.push("/lawyer-availability")}
+          className="bg-blue-600 text-white px-6 py-2 rounded"
+        >
+          Set Availability
+        </button>
+      </div>
+
+      {/* BOOKINGS SECTION */}
+      <h2 className="text-xl font-semibold mb-4">
+        Client Booking Requests
+      </h2>
 
       {bookings.length === 0 ? (
-        <p className="text-slate-600">
-          No client bookings yet.
+        <p className="text-gray-600">
+          No client booking requests yet.
         </p>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {bookings.map((booking) => (
             <div
               key={booking._id}
-              className="border rounded-lg p-4 bg-white shadow-sm"
+              className="border rounded-lg p-6 bg-white shadow"
             >
-              <p className="font-semibold">
-                Client: {booking.client?.name || "Unknown"}
+              <p className="font-semibold text-lg">
+                Client: {booking.client?.name}
               </p>
 
-              <p className="text-sm text-slate-600 mt-1">
-                {booking.caseDescription}
-              </p>
-
-              <p className="mt-2 text-sm">
+              <p className="mt-2">
                 Status:{" "}
-                <span className="font-medium capitalize">
+                <span className="capitalize font-medium">
                   {booking.status}
                 </span>
               </p>
 
+              {/* PENDING */}
               {booking.status === "pending" && (
-                <div className="flex gap-3 mt-3">
-                  <button
-                    onClick={() =>
-                      updateStatus(booking._id, "accepted")
+                <div className="mt-4 space-y-3">
+
+                  <input
+                    type="date"
+                    className="border p-2 rounded w-full"
+                    onChange={(e) =>
+                      setSlotData((prev) => ({
+                        ...prev,
+                        [booking._id]: {
+                          ...prev[booking._id],
+                          date: e.target.value,
+                        },
+                      }))
                     }
-                    className="bg-green-600 text-white px-4 py-1 rounded"
-                  >
-                    Accept
-                  </button>
+                  />
+
+                  <input
+                    type="text"
+                    placeholder="Time Slot (e.g. 3:00 PM)"
+                    className="border p-2 rounded w-full"
+                    onChange={(e) =>
+                      setSlotData((prev) => ({
+                        ...prev,
+                        [booking._id]: {
+                          ...prev[booking._id],
+                          timeSlot: e.target.value,
+                        },
+                      }))
+                    }
+                  />
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() =>
+                        updateBooking(booking._id, "confirmed")
+                      }
+                      className="bg-green-600 text-white px-4 py-2 rounded"
+                    >
+                      Confirm
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        updateBooking(booking._id, "rejected")
+                      }
+                      className="bg-red-600 text-white px-4 py-2 rounded"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* CONFIRMED */}
+              {booking.status === "confirmed" && (
+                <div className="mt-4">
+                  <p>
+                    Confirmed for:{" "}
+                    {new Date(booking.date).toDateString()} |{" "}
+                    {booking.timeSlot}
+                  </p>
 
                   <button
                     onClick={() =>
-                      updateStatus(booking._id, "rejected")
+                      router.push(`/chat/${booking._id}`)
                     }
-                    className="bg-red-600 text-white px-4 py-1 rounded"
+                    className="mt-3 bg-black text-white px-4 py-2 rounded"
                   >
-                    Reject
+                    Open Chat
                   </button>
                 </div>
               )}
 
-              {booking.status === "accepted" && (
-                <button
-                  onClick={() =>
-                    router.push(`/chat/${booking._id}`)
-                  }
-                  className="mt-3 bg-black text-white px-4 py-1 rounded"
-                >
-                  Open Chat
-                </button>
+              {/* REJECTED */}
+              {booking.status === "rejected" && (
+                <p className="mt-4 text-red-600">
+                  Booking Rejected
+                </p>
               )}
             </div>
           ))}
