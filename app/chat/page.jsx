@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 export default function AIChatPage() {
   const [messages, setMessages] = useState([]);
+  const [latestCases, setLatestCases] = useState([]); // ✅ FIXED
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -14,6 +15,10 @@ export default function AIChatPage() {
   const [showSavedChats, setShowSavedChats] = useState(false);
   const [savedChats, setSavedChats] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
+
+  const [attachedDocs, setAttachedDocs] = useState([]);
+
+  const fileInputRef = useRef(null);
 
   /* ================= SEND MESSAGE ================= */
 
@@ -26,43 +31,81 @@ export default function AIChatPage() {
     setLoading(true);
 
     try {
-      let res;
-
-      if (activeChatId) {
-        res = await fetch(
-          `http://localhost:5000/api/ai-chat/${activeChatId}/message`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
-            },
-            body: JSON.stringify({ message: input }),
-          }
-        );
-      } else {
-        res = await fetch("http://localhost:5000/api/ai-chat", {
+      const res = await fetch(
+        "http://localhost:5000/api/ai-chat",
+        {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
           body: JSON.stringify({ message: input }),
-        });
-      }
+        }
+      );
 
       const data = await res.json();
 
+      // Add assistant message
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
           content: data.reply,
-          similarCases: data.similarCases || [],
         },
       ]);
+
+      // Store recommended cases separately
+      setLatestCases(data.similarCases || []);
+
     } catch (error) {
       console.error(error);
       alert("AI error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  /* ================= FILE UPLOAD ================= */
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const uploadRes = await fetch(
+        "http://localhost:5000/api/documents/upload",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          body: formData,
+        }
+      );
+
+      const uploadData = await uploadRes.json();
+      const documentId = uploadData.document._id;
+
+      await fetch(
+        "http://localhost:5000/api/ai-chat/attach-document",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          body: JSON.stringify({ documentId }),
+        }
+      );
+
+      setAttachedDocs((prev) => [...prev, file.name]);
+
+    } catch (error) {
+      console.error(error);
+      alert("Upload failed");
     }
   };
 
@@ -142,19 +185,26 @@ export default function AIChatPage() {
   const deleteChat = async (id) => {
     if (!confirm("Delete this chat?")) return;
 
-    await fetch(`http://localhost:5000/api/ai-chat/${id}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
-      },
-    });
+    await fetch(
+      `http://localhost:5000/api/ai-chat/${id}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      }
+    );
 
-    setSavedChats((prev) => prev.filter((c) => c._id !== id));
+    setSavedChats((prev) =>
+      prev.filter((c) => c._id !== id)
+    );
   };
 
   const newChat = () => {
     setMessages([]);
+    setLatestCases([]); // clear recommendations
     setActiveChatId(null);
+    setAttachedDocs([]);
     setShowSavedChats(false);
   };
 
@@ -164,7 +214,6 @@ export default function AIChatPage() {
     <div className="min-h-screen p-8 bg-gray-100">
       <div className="max-w-3xl mx-auto bg-white p-6 rounded shadow">
 
-        {/* HEADER */}
         <div className="flex justify-between mb-4">
           <h1 className="text-2xl font-bold">
             🤖 AI Legal Assistant
@@ -194,41 +243,23 @@ export default function AIChatPage() {
           </div>
         </div>
 
-        {/* SAVED CHAT LIST */}
-        {showSavedChats && (
-          <div className="mb-4 border p-3 rounded">
-            <h2 className="font-semibold mb-2">Saved Chats</h2>
-
-            {savedChats.map((chat) => (
-              <div
-                key={chat._id}
-                className="p-2 border rounded mb-2 flex justify-between items-center hover:bg-gray-100"
+        {/* ATTACHED DOCS */}
+        {attachedDocs.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {attachedDocs.map((doc, index) => (
+              <span
+                key={index}
+                className="bg-blue-100 text-blue-700 px-3 py-1 rounded text-sm"
               >
-                <div
-                  onClick={() => openChat(chat._id)}
-                  className="cursor-pointer"
-                >
-                  <div className="font-medium">{chat.name}</div>
-                  {chat.description && (
-                    <div className="text-sm text-gray-500">
-                      {chat.description}
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  onClick={() => deleteChat(chat._id)}
-                  className="text-red-600 text-sm"
-                >
-                  🗑 Delete
-                </button>
-              </div>
+                📎 {doc}
+              </span>
             ))}
           </div>
         )}
 
         {/* MESSAGES */}
         <div className="h-96 overflow-y-auto border p-4 rounded mb-4 space-y-4">
+
           {messages.map((msg, i) => (
             <div key={i}>
               <div
@@ -240,46 +271,62 @@ export default function AIChatPage() {
               >
                 {msg.content}
               </div>
-
-              {/* Recommended Cases Section */}
-              {msg.similarCases?.length > 0 && (
-                <div className="mt-3">
-                  <div className="text-sm font-semibold text-gray-600 mb-2">
-                    🔎 Recommended Cases
-                  </div>
-
-                  {msg.similarCases.map((caseItem, index) => (
-                    <a
-                      key={index}
-                      href={caseItem.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block border rounded p-3 mb-2 hover:bg-gray-100 transition"
-                    >
-                      <div className="font-medium text-blue-600">
-                        {caseItem.title}
-                      </div>
-                      <div className="text-xs text-gray-500 break-all">
-                        {caseItem.link}
-                      </div>
-                    </a>
-                  ))}
-                </div>
-              )}
             </div>
           ))}
 
+          {/* ✅ Recommended cases always under latest message */}
+          {latestCases.length > 0 && (
+            <div className="mt-4">
+              <div className="text-sm font-semibold text-gray-600 mb-2">
+                🔎 Recommended Cases
+              </div>
+
+              {latestCases.map((caseItem, index) => (
+                <a
+                  key={index}
+                  href={caseItem.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block border rounded p-3 mb-2 hover:bg-gray-100 transition"
+                >
+                  <div className="font-medium text-blue-600">
+                    {caseItem.title}
+                  </div>
+                  <div className="text-xs text-gray-500 break-all">
+                    {caseItem.link}
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+
           {loading && <p>AI is typing...</p>}
+
         </div>
 
         {/* INPUT */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <button
+            onClick={() => fileInputRef.current.click()}
+            className="bg-gray-300 px-4 py-2 rounded text-xl"
+          >
+            +
+          </button>
+
+          <input
+            type="file"
+            ref={fileInputRef}
+            style={{ display: "none" }}
+            onChange={handleFileUpload}
+          />
+
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             className="flex-1 border p-2 rounded"
             placeholder="Ask legal question..."
           />
+
           <button
             onClick={sendMessage}
             className="bg-black text-white px-4 rounded"
@@ -287,48 +334,8 @@ export default function AIChatPage() {
             Send
           </button>
         </div>
+
       </div>
-
-      {/* SAVE MODAL */}
-      {showSaveModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
-          <div className="bg-white p-6 rounded shadow w-96">
-            <h2 className="text-lg font-bold mb-4">
-              Save This Chat
-            </h2>
-
-            <input
-              placeholder="Chat name"
-              value={chatName}
-              onChange={(e) => setChatName(e.target.value)}
-              className="w-full border p-2 rounded mb-3"
-            />
-
-            <textarea
-              placeholder="Short description (optional)"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full border p-2 rounded mb-4"
-            />
-
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowSaveModal(false)}
-                className="px-4 py-2 border rounded"
-              >
-                Cancel
-              </button>
-
-              <button
-                onClick={saveChat}
-                className="bg-green-600 text-white px-4 py-2 rounded"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

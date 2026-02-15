@@ -2,7 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom globals */
+/* ================= EXISTING LIGHT THEME ================= */
+
 body {
   @apply bg-slate-50 text-slate-900 font-inter;
 }
@@ -15,7 +16,135 @@ a {
   @apply text-blue-600 hover:text-blue-800 transition;
 }
 
-/* Navbar fix */
 .navbar {
   @apply bg-white shadow-md sticky top-0 z-50;
+}
+
+/* ================= LUXURY HOMEPAGE STYLES ================= */
+
+/* FLOAT ANIMATION */
+@keyframes float {
+  0% { transform: translateY(-8px); }
+  50% { transform: translateY(8px); }
+  100% { transform: translateY(-8px); }
+}
+
+.animate-float {
+  animation: float 10s ease-in-out infinite;
+}
+
+/* GOLD AURA */
+@keyframes auraPulse {
+  0%   { opacity: 0.45; transform: scale(1); }
+  50%  { opacity: 0.85; transform: scale(1.04); }
+  100% { opacity: 0.45; transform: scale(1); }
+}
+
+.gold-aura {
+  width: 720px;
+  height: 720px;
+  border-radius: 50%;
+  filter: blur(90px);
+}
+
+.animate-auraPulse {
+  animation: auraPulse 8s ease-in-out infinite;
+}
+
+/* FEATURE CARDS */
+.feature-card {
+  position: relative;
+  overflow: hidden;
+  padding: 40px;
+  border-radius: 24px;
+  background: rgba(20, 25, 40, 0.65);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(198,168,92,0.25);
+  transition: all 0.4s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-8px);
+  border-color: rgba(198,168,92,0.6);
+  box-shadow: 0 0 40px rgba(198,168,92,0.15);
+}
+
+.feature-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at 50% 0%,
+    rgba(198,168,92,0.12),
+    transparent 60%
+  );
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.feature-card:hover .feature-glow {
+  opacity: 1;
+}
+
+.feature-title {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: #E5E0D5;
+  margin-bottom: 16px;
+  position: relative;
+  z-index: 2;
+}
+
+.feature-text {
+  color: #9ca3af;
+  line-height: 1.7;
+  position: relative;
+  z-index: 2;
+}
+/* ================= LUXURY HERO ================= */
+
+@keyframes float {
+  0% { transform: translateY(-8px); }
+  50% { transform: translateY(8px); }
+  100% { transform: translateY(-8px); }
+}
+
+.animate-float {
+  animation: float 10s ease-in-out infinite;
+}
+
+@keyframes auraPulse {
+  0%   { opacity: 0.45; transform: scale(1); }
+  50%  { opacity: 0.85; transform: scale(1.04); }
+  100% { opacity: 0.45; transform: scale(1); }
+}
+
+.gold-aura {
+  width: 720px;
+  height: 720px;
+  border-radius: 50%;
+  filter: blur(90px);
+}
+
+.animate-auraPulse {
+  animation: auraPulse 8s ease-in-out infinite;
+}
+
+.orbit-ring {
+  width: 620px;
+  height: 620px;
+  border-radius: 50%;
+  border: 1px solid rgba(198,168,92,0.55);
+  box-shadow:
+    0 0 25px rgba(198,168,92,0.35),
+    inset 0 0 25px rgba(198,168,92,0.2);
+}
+
+@keyframes twinkle {
+  0%   { opacity: 0.4; }
+  50%  { opacity: 1; }
+  100% { opacity: 0.4; }
+}
+
+.animate-twinkle {
+  animation: twinkle 5s ease-in-out infinite alternate;
 }
